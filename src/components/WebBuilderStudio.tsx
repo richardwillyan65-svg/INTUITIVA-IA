@@ -22,7 +22,12 @@ import {
   ShieldCheck,
   Rocket,
   Zap,
-  Play
+  Play,
+  X,
+  Lock,
+  Server,
+  Terminal,
+  CheckSquare
 } from 'lucide-react';
 
 interface GeneratedProject {
@@ -41,6 +46,7 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({ initialPromp
   const [projectPrompt, setProjectPrompt] = useState(
     initialPrompt || 'Crie um site para uma clínica médica moderna com agendamento online, corpo clínico, depoimentos de pacientes e área de login.'
   );
+  const [projectType, setProjectType] = useState('Site Institucional + Agendamento');
 
   useEffect(() => {
     if (initialPrompt) {
@@ -81,7 +87,56 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({ initialPromp
     }
   };
 
-  const [projectType, setProjectType] = useState('Site Institucional + Agendamento');
+  const [isVercelModalOpen, setIsVercelModalOpen] = useState(false);
+  const [vercelProjectName, setVercelProjectName] = useState('');
+  const [vercelCustomDomain, setVercelCustomDomain] = useState('');
+  const [vercelApiToken, setVercelApiToken] = useState('');
+  const [isDeployingVercel, setIsDeployingVercel] = useState(false);
+  const [vercelDeploymentResult, setVercelDeploymentResult] = useState<any>(null);
+
+  const handleOpenVercelModal = () => {
+    if (!vercelProjectName && project.title) {
+      setVercelProjectName(
+        project.title
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9-]/g, '-')
+          .replace(/-+/g, '-')
+      );
+    }
+    setIsVercelModalOpen(true);
+  };
+
+  const handleDeployToVercel = async () => {
+    setIsDeployingVercel(true);
+    setVercelDeploymentResult(null);
+
+    try {
+      const res = await fetch('/api/deploy-vercel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectName: vercelProjectName || project.title,
+          customDomain: vercelCustomDomain,
+          vercelToken: vercelApiToken,
+          files: project.files,
+          htmlPreview: project.htmlPreview
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setVercelDeploymentResult(data);
+      } else {
+        throw new Error(data.error || 'Falha ao publicar na Vercel');
+      }
+    } catch (err: any) {
+      console.error('Erro na publicação Vercel:', err);
+    } finally {
+      setIsDeployingVercel(false);
+    }
+  };
 
   const [viewMode, setViewMode] = useState<'preview' | 'code' | 'agents'>('preview');
   const [viewportSize, setViewportSize] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
@@ -488,10 +543,10 @@ CREATE TABLE appointments (
                 <span>Baixar ZIP</span>
               </button>
               <button
-                onClick={() => alert('Conectado à Vercel. Preparando build contínuo...')}
-                className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={handleOpenVercelModal}
+                className="px-2.5 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
               >
-                <ExternalLink className="w-3 h-3 text-emerald-400" />
+                <ExternalLink className="w-3 h-3 text-indigo-400" />
                 <span>Deploy Vercel</span>
               </button>
             </div>
@@ -616,6 +671,160 @@ CREATE TABLE appointments (
           )}
         </div>
       </div>
+
+      {/* Vercel 1-Click Deployment & Domain/SSL Modal */}
+      {isVercelModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 space-y-6 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4 relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-black border border-slate-800 rounded-xl text-white font-bold text-base flex items-center justify-center shadow-inner">
+                  ▲
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                    Publicar Projeto na Vercel (1-Click)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Implantação instantânea na Vercel Edge Network com SSL TLS v1.3 gratuito e suporte a domínio personalizado.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsVercelModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <div className="space-y-4 relative z-10 text-xs">
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 block mb-1.5">
+                  Nome do Projeto na Vercel
+                </label>
+                <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200">
+                  <span className="text-slate-500 font-mono text-[11px]">vercel.app/</span>
+                  <input
+                    type="text"
+                    value={vercelProjectName}
+                    onChange={(e) => setVercelProjectName(e.target.value)}
+                    placeholder="meu-site-intuitiva"
+                    className="bg-transparent w-full outline-none font-mono text-white text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 block mb-1.5 flex items-center justify-between">
+                  <span>Domínio Personalizado (Opcional)</span>
+                  <span className="text-[10px] text-emerald-400 font-normal flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> SSL Let's Encrypt Incluso
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={vercelCustomDomain}
+                  onChange={(e) => setVercelCustomDomain(e.target.value)}
+                  placeholder="ex: clinicahealth.com.br"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-indigo-500"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Se informado, o projeto será automaticamente configurado com registros DNS CNAME/A e certificado HTTPS.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 block mb-1.5 flex items-center justify-between">
+                  <span>Token da API Vercel (Opcional)</span>
+                  <span className="text-[10px] text-indigo-400 font-normal">Minha Conta Vercel</span>
+                </label>
+                <input
+                  type="password"
+                  value={vercelApiToken}
+                  onChange={(e) => setVercelApiToken(e.target.value)}
+                  placeholder="Cole seu Vercel API Token se desejar publicar diretamente em sua conta pessoal"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Action Button */}
+              <button
+                onClick={handleDeployToVercel}
+                disabled={isDeployingVercel}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/30 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDeployingVercel ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Publicando na Vercel & Gerando SSL...</span>
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="w-4 h-4" />
+                    <span>🚀 Publicar na Vercel em 1-Clique</span>
+                  </>
+                )}
+              </button>
+
+              {/* Deployment Result Card */}
+              {vercelDeploymentResult && (
+                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 animate-fadeIn">
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                      <span className="font-bold text-emerald-400 text-xs">🟢 Projeto Publicado na Vercel!</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">ID: {vercelDeploymentResult.deploymentId}</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block">URL de Produção Vercel:</span>
+                      <a
+                        href={vercelDeploymentResult.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-indigo-400 hover:underline font-mono font-bold flex items-center gap-1 mt-0.5"
+                      >
+                        <span>{vercelDeploymentResult.url}</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+
+                    {vercelDeploymentResult.customDomain && (
+                      <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                        <span className="text-[10px] font-bold text-slate-300 block">Domínio Personalizado Assiciado:</span>
+                        <div className="font-mono text-emerald-300 font-bold">
+                          https://{vercelDeploymentResult.customDomain.domain}
+                        </div>
+                        <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                          <Lock className="w-3 h-3 text-emerald-400" />
+                          <span>SSL/TLS Ativo via Let's Encrypt Vercel Edge</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Logs de Implantação Vercel:</span>
+                      <div className="bg-black/90 p-3 rounded-xl font-mono text-[10px] text-emerald-400 space-y-1 border border-slate-800 max-h-32 overflow-y-auto">
+                        {vercelDeploymentResult.buildLogs?.map((log: string, idx: number) => (
+                          <div key={idx}>{log}</div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
