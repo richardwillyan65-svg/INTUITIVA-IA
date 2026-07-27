@@ -1,0 +1,6 @@
+{
+  "name": "Intuitiva IA",
+  "description": "Inteligência Artificial Full Stack para Desenvolvimento, Automação, Design, Marketing e Arquitetura de Sistemas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
