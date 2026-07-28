@@ -121,6 +121,30 @@ export interface PublishedProject {
   visits: number;
 }
 
+export interface IAMPermissionCheck {
+  id: string;
+  permission: string;
+  title: string;
+  category: 'Billing' | 'Compute & Cloud Run' | 'IAM & Auth' | 'Resource Manager' | 'Firebase';
+  status: 'granted' | 'missing' | 'pending_approval';
+  requiredRole: string;
+  recommendedRoleName: string;
+  resource: string;
+  details: string;
+}
+
+export interface IAMTroubleshooterRequest {
+  id: string;
+  userEmail: string;
+  resourceId: string;
+  permission: string;
+  requestMessage: string;
+  token: string;
+  troubleshooterUrl: string;
+  timestamp: string;
+  status: 'pending' | 'analyzed' | 'resolved';
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -129,5 +153,16 @@ export interface UserProfile {
   plan: 'Gratuito' | 'Pro' | 'Business';
   credits: number;
   isLoggedIn: boolean;
+}
+
+export interface UserSavedProject {
+  id: string;
+  title: string;
+  time: string;
+  isPublished?: boolean;
+  previewUrl?: string;
+  headline?: string;
+  prompt?: string;
+  createdAt: string;
 }
 

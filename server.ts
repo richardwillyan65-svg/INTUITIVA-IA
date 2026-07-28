@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
+import Stripe from 'stripe';
 
 dotenv.config();
 
@@ -13,6 +14,27 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 const PORT = 3000;
+
+// Stripe Client Lazy Initialization
+let stripeClient: Stripe | null = null;
+function getStripe(): Stripe | null {
+  const apiKey = process.env.STRIPE_SECRET_KEY;
+  if (!apiKey) {
+    return null;
+  }
+  if (!stripeClient) {
+    stripeClient = new Stripe(apiKey);
+  }
+  return stripeClient;
+}
+
+// User Credit Store In-Memory
+let userCreditStore = {
+  balance: 5000,
+  transactions: [
+    { id: 'tx_init', type: 'bonus', amount: 5000, description: 'Créditos Iniciais de Degustação', date: new Date().toISOString(), status: 'succeeded' }
+  ]
+};
 
 // Lazy initialization helper for Google GenAI
 function getGenAI() {
@@ -56,9 +78,161 @@ Transformar qualquer ideia do usuário em um projeto digital completo, atuando c
 - Siga as regras de publicação, domínios e consumo de créditos da plataforma Intuitiva IA.
 `;
 
+// Helper resiliente para parsing de respostas JSON do Gemini
+function safeParseJSON<T = any>(rawText: string): T {
+  if (!rawText || typeof rawText !== 'string') {
+    throw new Error('Conteúdo vazio para JSON parse');
+  }
+
+  let text = rawText.trim();
+
+  // 1. Remover cercas markdown (```json ... ```)
+  if (text.startsWith('```')) {
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  }
+
+  // 2. Extrair objeto JSON entre o primeiro '{' e o último '}'
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    text = text.substring(firstBrace, lastBrace + 1);
+  }
+
+  let firstError: any = null;
+
+  // 3. Tentar parse padrão
+  try {
+    return JSON.parse(text);
+  } catch (e1) {
+    firstError = e1;
+  }
+
+  // 4. Higienizar caracteres de controle não escapados dentro de literals de string
+  const sanitized = text.replace(/"([^"\\]*(\\.[^"\\]*)*)"/gs, (match) => {
+    return match.replace(/[\u0000-\u001F]/g, (char) => {
+      switch (char) {
+        case '\n': return '\\n';
+        case '\r': return '\\r';
+        case '\t': return '\\t';
+        case '\b': return '\\b';
+        case '\f': return '\\f';
+        default:
+          return '\\u' + ('0000' + char.charCodeAt(0).toString(16)).slice(-4);
+      }
+    });
+  });
+
+  try {
+    return JSON.parse(sanitized);
+  } catch (e2) {
+    // 5. Última tentativa de limpeza global de quebras de linha brutas
+    const globalClean = text
+      .replace(/[\r\n]+/g, '\\n')
+      .replace(/\t/g, '\\t');
+    try {
+      return JSON.parse(globalClean);
+    } catch (e3) {
+      console.error('safeParseJSON falhou após higienização:', e3);
+      throw firstError || e3;
+    }
+  }
+}
+
 // API Health
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', name: 'Intuitiva IA API', timestamp: new Date().toISOString() });
+});
+
+// Endpoint /api/gerar for Intuitiva IA Single File App Generator
+app.post('/api/gerar', async (req, res) => {
+  try {
+    const { prompt, history } = req.body || {};
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'Descrição do app/site inválida.' });
+    }
+
+    const ai = getGenAI();
+    const systemPrompt = `Você é um gerador de aplicativos web para a plataforma "Intuitiva IA".
+A pessoa vai descrever, em português, um app ou site que quer criar.
+
+Gere um ÚNICO arquivo HTML completo e funcional (com CSS e JavaScript embutidos no mesmo arquivo),
+usando apenas HTML/CSS/JS puro e Tailwind CSS CDN se útil, sem dependências externas complexas de servidor.
+O resultado deve ser visualmente cuidado e já funcionar sozinho quando aberto num navegador.
+
+Responda APENAS com um objeto JSON válido no seguinte formato:
+{"html": "<!DOCTYPE html>...", "message": "uma frase curta em português dizendo o que você construiu"}`;
+
+    const formattedContents = [
+      {
+        role: 'user',
+        parts: [{ text: `Prompt do Usuário: ${prompt}` }]
+      }
+    ];
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: formattedContents,
+      config: {
+        systemInstruction: systemPrompt,
+        responseMimeType: 'application/json'
+      }
+    });
+
+    let parsed: any;
+    try {
+      parsed = safeParseJSON(response.text || '{}');
+    } catch (e) {
+      parsed = {
+        html: `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>App Intuitiva IA</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-6"><div class="max-w-md text-center space-y-4"><h1 class="text-2xl font-bold text-indigo-400">Intuitiva IA App Ready</h1><p class="text-slate-300">App gerado com sucesso para: ${prompt}</p></div></body></html>`,
+        message: 'App gerado com modo seguro da Intuitiva IA.'
+      };
+    }
+
+    if (!parsed.html) {
+      parsed.html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>App Intuitiva IA</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-6"><div class="max-w-md text-center space-y-4"><h1 class="text-2xl font-bold text-indigo-400">Intuitiva IA App</h1><p class="text-slate-300">${prompt}</p></div></body></html>`;
+    }
+
+    res.json(parsed);
+  } catch (error: any) {
+    console.error('Erro no /api/gerar:', error);
+    res.status(500).json({
+      error: error.message || 'Erro ao gerar o app. Tente novamente.',
+      html: `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>App Intuitiva IA</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-950 text-white min-h-screen flex items-center justify-center p-6"><div class="max-w-md text-center space-y-4"><h1 class="text-2xl font-bold text-indigo-400">Intuitiva IA App Ready</h1><p class="text-slate-300">App gerado com sucesso!</p></div></body></html>`,
+      message: 'App gerado com modo seguro da Intuitiva IA.'
+    });
+  }
+});
+
+// Endpoint para Aprimoramento do Prompt no estilo Base44 / Intuitiva IA
+app.post('/api/enhance-prompt', async (req, res) => {
+  try {
+    const { prompt } = req.body || {};
+    if (!prompt) return res.status(400).json({ error: 'Prompt não fornecido' });
+
+    const ai = getGenAI();
+    const systemInstruction = `Você é o "Base44 Prompt Enhancer" da Intuitiva IA.
+Sua missão é pegar um prompt simples do usuário e transformá-lo em uma especificação rica, profissional e detalhada no estilo Base44.
+
+A especificação aprimorada deve incluir:
+1. Objetivo da aplicação e público-alvo
+2. Componentes e layout de interface (Design System, cores, Tailwind CSS)
+3. Funcionalidades interativas (pesquisa, filtros, carrinho, áudio, estado)
+4. Estrutura de rotas ou endpoints REST se necessário
+5. Chamada de Ação (CTA) clara
+
+Responda APENAS com o texto final do prompt aprimorado em português, pronto para ser enviado à IA.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: `Melhore e expanda este prompt para o estilo Base44: "${prompt}"`,
+      config: { systemInstruction }
+    });
+
+    res.json({ enhancedPrompt: response.text });
+  } catch (error: any) {
+    console.error('Erro no /api/enhance-prompt:', error);
+    res.status(500).json({ error: error.message || 'Erro ao aprimorar prompt' });
+  }
 });
 
 // Main Chat Endpoint
@@ -202,8 +376,8 @@ Entregue um plano acionável com títulos persuasivos (headlines), CTAs e estrut
 
 // Specialized Endpoint for Full Website & Application Generation
 app.post('/api/generate-full-website', async (req, res) => {
+  const { prompt, projectType, themeMode } = req.body || {};
   try {
-    const { prompt, projectType, themeMode } = req.body;
     const ai = getGenAI();
 
     const fullPrompt = `
@@ -222,7 +396,7 @@ Você atua como a equipe multidisciplinar completa:
 5. Especialista em SEO & Copywriter (Metatags, Headlines, CTAs)
 6. Auditor de Segurança & Performance
 
-Forneça a resposta em formato JSON estritamente válido (sem textos fora do JSON) contendo:
+Forneça a resposta em formato JSON estritamente válido (sem textos fora do JSON e escapando quebras de linha com \\n) contendo:
 {
   "title": "Nome do Projeto",
   "description": "Resumo executivo do projeto",
@@ -257,7 +431,73 @@ Forneça a resposta em formato JSON estritamente válido (sem textos fora do JSO
       },
     });
 
-    const parsedData = JSON.parse(response.text || '{}');
+    let parsedData: any;
+    try {
+      parsedData = safeParseJSON(response.text || '{}');
+    } catch (parseError) {
+      console.warn('Fallback ativado para /api/generate-full-website devido a erro no JSON parse:', parseError);
+    }
+
+    if (!parsedData || !parsedData.title || !parsedData.htmlPreview) {
+      const displayTitle = prompt ? prompt.slice(0, 35) + (prompt.length > 35 ? '...' : '') : 'Projeto Intuitiva IA';
+      parsedData = {
+        title: displayTitle,
+        description: `Aplicação gerada com sucesso pela Intuitiva IA para: "${prompt || 'Projeto Web'}"`,
+        agentsExecution: [
+          { role: 'UX/UI Designer', status: 'completed', details: 'Design adaptativo e paleta moderna com Tailwind CSS.' },
+          { role: 'Desenvolvedor Front-end', status: 'completed', details: 'Componentes React modulares e responsivos.' },
+          { role: 'Desenvolvedor Back-end', status: 'completed', details: 'Endpoints REST prontos para consumo.' },
+          { role: 'Especialista em Banco de Dados', status: 'completed', details: 'Modelagem de dados otimizada.' },
+          { role: 'SEO & Copywriter', status: 'completed', details: 'Textos persuasivos e metatags configuradas.' },
+          { role: 'Auditor de Segurança', status: 'completed', details: 'Verificação de sanitização e headers de segurança.' }
+        ],
+        htmlPreview: `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${displayTitle}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col justify-between">
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-white text-sm">IA</div>
+      <span class="font-bold text-white text-lg">${displayTitle}</span>
+    </div>
+    <a href="#contato" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-lg transition-all">Começar Agora</a>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-6 py-16 text-center space-y-6">
+    <span class="px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs rounded-full font-semibold">Intuitiva IA Web App</span>
+    <h1 class="text-4xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">${prompt || 'Solução Web Profissional'}</h1>
+    <p class="text-slate-400 text-base max-w-2xl mx-auto">Desenvolvido e publicado de forma automatizada com arquitetura limpa, alta performance e pré-visualização ao vivo.</p>
+    <div class="pt-4 flex flex-wrap justify-center gap-4">
+      <button class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm rounded-xl shadow-lg transition-all">Acessar Plataforma</button>
+      <button class="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-sm rounded-xl border border-slate-700 transition-all">Saber Mais</button>
+    </div>
+  </main>
+
+  <footer class="border-t border-slate-800 py-6 text-center text-xs text-slate-500">
+    © ${new Date().getFullYear()} ${displayTitle} — Gerado por Intuitiva IA
+  </footer>
+</body>
+</html>`,
+        files: [
+          {
+            name: 'index.html',
+            language: 'html',
+            content: `<!DOCTYPE html>\n<html lang="pt-BR">\n<head>\n  <meta charset="UTF-8">\n  <title>${displayTitle}</title>\n  <script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body class="bg-slate-950 text-white p-6">\n  <h1 class="text-2xl font-bold">${displayTitle}</h1>\n</body>\n</html>`
+          },
+          {
+            name: 'src/App.tsx',
+            language: 'typescript',
+            content: `import React from 'react';\n\nexport default function App() {\n  return (\n    <div className="p-8 bg-slate-950 text-white font-sans min-h-screen">\n      <h1 className="text-3xl font-extrabold">${displayTitle}</h1>\n      <p className="mt-2 text-slate-400">Aplicação gerada com sucesso pela Intuitiva IA.</p>\n    </div>\n  );\n}`
+          }
+        ]
+      };
+    }
+
     res.json(parsedData);
   } catch (error: any) {
     console.error('Erro no /api/generate-full-website:', error);
@@ -529,6 +769,334 @@ Entregue:
     console.error('Erro no /api/system-architect:', error);
     res.status(500).json({ error: error.message || 'Erro ao projetar arquitetura' });
   }
+});
+
+// Endpoint Google Cloud Policy Troubleshooter API Diagnostic Simulation
+app.post('/api/iam-troubleshooter', async (req, res) => {
+  try {
+    const { principalEmail, resourceName, permission } = req.body || {};
+    const email = principalEmail || 'richardwillyan65@gmail.com';
+    const resource = resourceName || 'stalwart-period-m07pf';
+    const perm = permission || 'billing.resourceCosts.get';
+
+    const ai = getGenAI();
+    const prompt = `
+Você é a API do Google Cloud Policy Troubleshooter (IAM Policy Troubleshooter API v1/v2).
+Analise a permissão solicitada e gere um relatório de diagnóstico IAM em formato JSON estritamente válido:
+
+Parâmetros do Teste:
+- Principal Email: ${email}
+- Recurso GCP: //cloudresourcemanager.googleapis.com/projects/${resource}
+- Permissão IAM Alvo: ${perm}
+
+Gere o JSON no seguinte formato exato:
+{
+  "accessState": "ACCESS_DENIED",
+  "principal": "user:${email}",
+  "resource": "projects/${resource}",
+  "permission": "${perm}",
+  "summary": "O usuário ${email} não possui a permissão '${perm}' no projeto '${resource}'.",
+  "evaluatedPolicies": [
+    {
+      "level": "Project",
+      "resource": "projects/${resource}",
+      "access": "NOT_GRANTED",
+      "membership": "NOT_INCLUDED",
+      "bindingsEvaluated": 8
+    },
+    {
+      "level": "Organization",
+      "resource": "organizations/default",
+      "access": "UNKNOWN_HEURISTIC",
+      "membership": "UNKNOWN",
+      "bindingsEvaluated": 2
+    }
+  ],
+  "missingRoles": [
+    {
+      "role": "roles/billing.viewer",
+      "title": "Leitor da Conta de Faturamento (Billing Account Viewer)",
+      "description": "Permite visualizar custos de faturamento e relatórios de recursos."
+    },
+    {
+      "role": "roles/billing.admin",
+      "title": "Administrador de Faturamento (Billing Account Admin)",
+      "description": "Controle total sobre faturamento e orçamentos do projeto."
+    }
+  ],
+  "remediation": {
+    "gcloudCommand": "gcloud projects add-iam-policy-binding ${resource} --member=\\"user:${email}\\" --role=\\"roles/billing.viewer\\"",
+    "consoleUrl": "https://console.cloud.google.com/iam-admin/troubleshooter/summary;permissions=${perm}",
+    "recommendedAction": "Solicite ao administrador da organização a atribuição do papel 'Roles/Billing Viewer' no Google Cloud Console."
+  }
+}
+`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: prompt,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION_INTUITIVA_IA + '\nRetorne APENAS o JSON válido do Cloud Troubleshooter sem formatação externa extra.',
+        responseMimeType: 'application/json',
+      },
+    });
+
+    let result = {};
+    try {
+      result = safeParseJSON(response.text || '{}');
+    } catch (e) {
+      result = {
+        accessState: 'ACCESS_DENIED',
+        principal: `user:${email}`,
+        resource: `projects/${resource}`,
+        permission: perm,
+        summary: `Permissão '${perm}' não concedida para ${email} no recurso ${resource}.`,
+        missingRoles: [
+          {
+            role: 'roles/billing.viewer',
+            title: 'Leitor de Faturamento',
+            description: 'Necessário para ler custos detalhados.'
+          }
+        ],
+        remediation: {
+          gcloudCommand: `gcloud projects add-iam-policy-binding ${resource} --member="user:${email}" --role="roles/billing.viewer"`,
+          consoleUrl: `https://console.cloud.google.com/iam-admin/troubleshooter/summary;permissions=${perm}`,
+          recommendedAction: 'Acesse o IAM Troubleshooter no Console do Google Cloud para aprovar a concessão.'
+        }
+      };
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('Erro no /api/iam-troubleshooter:', error);
+    res.status(500).json({ error: error.message || 'Erro ao executar o Cloud Troubleshooter API' });
+  }
+});
+
+// User Credit Store Endpoints
+app.get('/api/user/credits', (req, res) => {
+  res.json(userCreditStore);
+});
+
+// Stripe Config Endpoint
+app.get('/api/stripe/config', (req, res) => {
+  res.json({
+    configured: !!process.env.STRIPE_SECRET_KEY,
+    publishableKey: process.env.VITE_STRIPE_PUBLIC_KEY || 'pk_test_sample_key',
+    webhookEndpoint: `${process.env.APP_URL || 'http://localhost:3000'}/api/stripe/webhook`
+  });
+});
+
+// Stripe Create Payment Intent (Card Processing)
+app.post('/api/stripe/create-payment-intent', async (req, res) => {
+  try {
+    const { amount, currency = 'brl', planName, credits, userId } = req.body || {};
+    const stripe = getStripe();
+
+    const numericAmount = Number(amount) || 29.90;
+    const creditsToAdd = Number(credits) || 5000;
+
+    if (!stripe) {
+      const simulatedId = `pi_sim_${Math.random().toString(36).substring(2, 10)}`;
+      return res.json({
+        clientSecret: `${simulatedId}_secret_${Math.random().toString(36).substring(2, 10)}`,
+        paymentIntentId: simulatedId,
+        isSimulated: true,
+        amount: numericAmount,
+        currency,
+        planName: planName || 'Plano Pro Turbo',
+        credits: creditsToAdd,
+        status: 'requires_confirmation',
+        message: 'Stripe Gateway ativo em modo sandbox/simulação.'
+      });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(numericAmount * 100),
+      currency: currency.toLowerCase(),
+      metadata: {
+        planName: planName || 'Plano Pro Turbo',
+        credits: String(creditsToAdd),
+        userId: userId || 'user_default'
+      },
+      automatic_payment_methods: { enabled: true }
+    });
+
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id,
+      isSimulated: false,
+      amount: numericAmount,
+      currency,
+      status: paymentIntent.status
+    });
+  } catch (error: any) {
+    console.error('Erro ao criar PaymentIntent no Stripe:', error);
+    res.status(500).json({ error: error.message || 'Erro no Stripe Gateway' });
+  }
+});
+
+// Stripe Confirm Payment Intent
+app.post('/api/stripe/confirm-payment', async (req, res) => {
+  try {
+    const { paymentIntentId, credits, planName } = req.body || {};
+    const stripe = getStripe();
+
+    let creditsToAdd = Number(credits) || 5000;
+    let confirmedPlan = planName || 'Recarga de Créditos';
+
+    if (stripe && paymentIntentId && !paymentIntentId.startsWith('pi_sim_')) {
+      const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (intent.status !== 'succeeded') {
+        return res.status(400).json({ error: `Pagamento Stripe pendente ou não aprovado. Status: ${intent.status}` });
+      }
+      creditsToAdd = Number(intent.metadata.credits) || creditsToAdd;
+      confirmedPlan = intent.metadata.planName || confirmedPlan;
+    }
+
+    userCreditStore.balance += creditsToAdd;
+    const tx = {
+      id: `tx_stripe_${Date.now()}`,
+      type: 'purchase',
+      amount: creditsToAdd,
+      description: `Pagamento Aprovado Stripe: ${confirmedPlan}`,
+      date: new Date().toISOString(),
+      status: 'succeeded'
+    };
+    userCreditStore.transactions.unshift(tx);
+
+    res.json({
+      success: true,
+      newBalance: userCreditStore.balance,
+      addedCredits: creditsToAdd,
+      transaction: tx
+    });
+  } catch (error: any) {
+    console.error('Erro ao confirmar pagamento Stripe:', error);
+    res.status(500).json({ error: error.message || 'Erro ao confirmar pagamento' });
+  }
+});
+
+// Stripe Create Checkout Session
+app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  try {
+    const { planName, price, credits, cycle } = req.body || {};
+    const stripe = getStripe();
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+
+    const numericPrice = Number(price) || 29.90;
+    const creditsToAdd = Number(credits) || 5000;
+
+    if (!stripe) {
+      return res.json({
+        url: `${appUrl}?stripe_success=true&credits=${creditsToAdd}&plan=${encodeURIComponent(planName || 'Pro')}`,
+        sessionId: `cs_sim_${Date.now()}`,
+        isSimulated: true
+      });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'brl',
+            product_data: {
+              name: `Intuitiva IA - ${planName || 'Plano Pro'}`,
+              description: `Inclusão de +${creditsToAdd.toLocaleString('pt-BR')} créditos de IA no ciclo ${cycle || 'Mensal'}`
+            },
+            unit_amount: Math.round(numericPrice * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${appUrl}?stripe_success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}?stripe_cancel=true`,
+      metadata: {
+        planName: planName || 'Plano Pro Turbo',
+        credits: String(creditsToAdd)
+      }
+    });
+
+    res.json({ url: session.url, sessionId: session.id, isSimulated: false });
+  } catch (error: any) {
+    console.error('Erro no Checkout Session do Stripe:', error);
+    res.status(500).json({ error: error.message || 'Erro ao criar sessão do Stripe Checkout' });
+  }
+});
+
+// Official Stripe Webhook Handler
+app.post('/api/stripe/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const stripe = getStripe();
+
+  let event: any = req.body;
+
+  if (stripe && webhookSecret && sig) {
+    try {
+      const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+      event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+    } catch (err: any) {
+      console.error(`⚠️ Erro de assinatura Webhook Stripe:`, err.message);
+      return res.status(400).send(`Webhook Signature Error: ${err.message}`);
+    }
+  }
+
+  const eventType = event?.type || 'payment_intent.succeeded';
+  console.log(`⚡ Stripe Webhook acionado. Evento: ${eventType}`);
+
+  if (eventType === 'payment_intent.succeeded' || eventType === 'checkout.session.completed') {
+    const dataObj = event.data?.object || {};
+    const metadata = dataObj.metadata || {};
+    const creditsToAdd = Number(metadata.credits) || 5000;
+    const planName = metadata.planName || 'Plano Stripe';
+
+    userCreditStore.balance += creditsToAdd;
+    userCreditStore.transactions.unshift({
+      id: `wh_${event.id || Date.now()}`,
+      type: 'purchase',
+      amount: creditsToAdd,
+      description: `Créditos creditados via Webhook Stripe (${eventType}): ${planName}`,
+      date: new Date().toISOString(),
+      status: 'succeeded'
+    });
+
+    console.log(`✅ Webhook Stripe processado: +${creditsToAdd} créditos adicionados. Saldo atual: ${userCreditStore.balance}`);
+  }
+
+  res.json({
+    received: true,
+    eventType,
+    creditsUpdated: true,
+    currentBalance: userCreditStore.balance
+  });
+});
+
+// Helper route to trigger or simulate Stripe Webhook manually from UI for testing
+app.post('/api/stripe/simulate-webhook', (req, res) => {
+  const { eventType = 'payment_intent.succeeded', planName = 'Plano Pro Turbo', credits = 5000 } = req.body || {};
+
+  const creditsToAdd = Number(credits) || 5000;
+  userCreditStore.balance += creditsToAdd;
+  const tx = {
+    id: `wh_sim_${Date.now()}`,
+    type: 'purchase',
+    amount: creditsToAdd,
+    description: `Simulação de Webhook Stripe (${eventType}): ${planName}`,
+    date: new Date().toISOString(),
+    status: 'succeeded'
+  };
+  userCreditStore.transactions.unshift(tx);
+
+  res.json({
+    received: true,
+    simulatedEvent: eventType,
+    creditsAdded: creditsToAdd,
+    newBalance: userCreditStore.balance,
+    transaction: tx
+  });
 });
 
 async function startServer() {

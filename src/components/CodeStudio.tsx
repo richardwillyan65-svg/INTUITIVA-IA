@@ -1,17 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Code2,
   Terminal,
   Play,
   Copy,
   Check,
+  CloudCheck,
   Sparkles,
   RefreshCw,
   FileCode,
   Layers,
   ShieldAlert,
   Download,
-  BookOpen
+  BookOpen,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react';
 import { INITIAL_TEMPLATES } from '../data/capabilitiesData';
 import { CodeTemplate } from '../types';
@@ -26,6 +30,39 @@ export const CodeStudio: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [simulatedConsole, setSimulatedConsole] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'editor' | 'console'>('editor');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
+  const [lastSavedTime, setLastSavedTime] = useState<string>(
+    new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  );
+
+  const [themeMode, setThemeMode] = useState<'system' | 'dark' | 'light'>('system');
+  const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      setSystemPrefersDark(e.matches);
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  const isDark = themeMode === 'system' ? systemPrefersDark : themeMode === 'dark';
+
+  useEffect(() => {
+    setSaveStatus('saving');
+    const timer = setTimeout(() => {
+      setSaveStatus('saved');
+      setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [customPrompt, generatedCode, selectedTemplate]);
 
   const handleGenerateCode = async () => {
     if (!customPrompt.trim() || isGenerating) return;
@@ -85,10 +122,27 @@ export const CodeStudio: React.FC = () => {
             <Code2 className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
+            <h2 className="text-base font-bold text-white flex flex-wrap items-center gap-2">
               Intuitiva IA - Code Studio
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-semibold">
                 Clean Code & Security
+              </span>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border transition-all duration-300 ${
+                saveStatus === 'saving'
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse'
+                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              }`}>
+                {saveStatus === 'saving' ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />
+                    <span>Salvando...</span>
+                  </>
+                ) : (
+                  <>
+                    <CloudCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Salvo às {lastSavedTime}</span>
+                  </>
+                )}
               </span>
             </h2>
             <p className="text-xs text-slate-400">Geração e refatoração de código limpo, modular e seguro em tempo real.</p>
@@ -233,20 +287,81 @@ export const CodeStudio: React.FC = () => {
         </div>
 
         {/* Right Panel: Code Viewer or Console */}
-        <div className="flex-1 bg-slate-950 flex flex-col overflow-hidden">
+        <div className={`flex-1 flex flex-col overflow-hidden transition-colors duration-200 ${
+          isDark ? 'bg-slate-950 text-slate-200' : 'bg-slate-100 text-slate-900'
+        }`}>
           {activeTab === 'editor' ? (
             <div className="flex-1 flex flex-col overflow-hidden font-mono text-xs">
               {/* Code Editor Top Status */}
-              <div className="bg-slate-900/90 border-b border-slate-800 px-4 py-2 flex items-center justify-between text-slate-400 shrink-0">
-                <span className="text-xs font-semibold text-slate-300 flex items-center gap-2">
-                  <FileCode className="w-4 h-4 text-indigo-400" />
+              <div className={`border-b px-4 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0 transition-colors ${
+                isDark ? 'bg-slate-900/90 border-slate-800 text-slate-400' : 'bg-slate-200/90 border-slate-300 text-slate-700'
+              }`}>
+                <span className={`text-xs font-semibold flex items-center gap-2 ${
+                  isDark ? 'text-slate-300' : 'text-slate-800'
+                }`}>
+                  <FileCode className="w-4 h-4 text-indigo-500" />
                   {selectedTemplate.filename || 'generatedCode.ts'}
                 </span>
-                <span className="text-[11px] text-slate-500">TypeScript • Clean Code</span>
+
+                {/* IDE Theme Toggle */}
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-sans font-medium hidden sm:inline ${
+                    isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}>
+                    Tema do IDE:
+                  </span>
+                  <div className={`flex items-center p-0.5 rounded-lg border font-sans text-xs transition-colors ${
+                    isDark ? 'bg-slate-800/80 border-slate-700/60' : 'bg-slate-300/80 border-slate-400/60'
+                  }`}>
+                    <button
+                      onClick={() => setThemeMode('system')}
+                      title="Sincronizar com a aparência do sistema"
+                      className={`px-2 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                        themeMode === 'system'
+                          ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                          : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Monitor className="w-3 h-3" />
+                      <span>Sistema</span>
+                      {themeMode === 'system' && (
+                        <span className="text-[9px] opacity-80">({isDark ? 'Escuro' : 'Claro'})</span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setThemeMode('dark')}
+                      title="Forçar modo escuro"
+                      className={`px-2 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                        themeMode === 'dark'
+                          ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                          : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Moon className="w-3 h-3" />
+                      <span>Escuro</span>
+                    </button>
+
+                    <button
+                      onClick={() => setThemeMode('light')}
+                      title="Forçar modo claro"
+                      className={`px-2 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${
+                        themeMode === 'light'
+                          ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                          : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Sun className="w-3 h-3" />
+                      <span>Claro</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Code Body */}
-              <div className="flex-1 overflow-auto p-4 bg-slate-950 text-slate-200">
+              <div className={`flex-1 overflow-auto p-4 transition-colors ${
+                isDark ? 'bg-slate-950 text-slate-200' : 'bg-white text-slate-900'
+              }`}>
                 <pre className="leading-relaxed">
                   <code>{generatedCode}</code>
                 </pre>

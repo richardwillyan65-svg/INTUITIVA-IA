@@ -30,6 +30,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { IntuitivaLogo } from './IntuitivaLogo';
+import { useLanguage } from '../context/LanguageContext';
 
 interface ReplitAgentHomeProps {
   onStartBuild: (promptText: string, category?: string) => void;
@@ -44,6 +45,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
   onOpenImport,
   onOpenUpgrade
 }) => {
+  const { t } = useLanguage();
   const [promptText, setPromptText] = useState('');
   const [isPlanChecked, setIsPlanChecked] = useState(true);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
@@ -55,17 +57,17 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
     { id: 'Website', label: 'Website', icon: Globe },
     { id: 'Mobile', label: 'Mobile', icon: Smartphone },
     { id: 'Design', label: 'Design', icon: Palette },
-    { id: 'Animation', label: 'Animation', icon: Film },
-    { id: 'Slides', label: 'Slides', icon: Presentation },
+    { id: 'Animation', label: 'Animação', icon: Film },
+    { id: 'Slides', label: 'Apresentação', icon: Presentation },
   ];
 
   const examplePrompts = [
-    'SaaS hero animation',
-    'Fitness app onboarding wireframe',
-    'Freelance client portal',
-    '3D maze game',
-    '3D racing game',
-    'Beginner running tracker'
+    'Animação de Hero SaaS',
+    'Wireframe de onboarding de fitness',
+    'Portal do cliente freelancer',
+    'Jogo em labirinto 3D',
+    'Jogo de corrida 3D',
+    'Rastreador de corrida iniciante'
   ];
 
   const brandLogos = [
@@ -110,7 +112,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                 themeMode === 'dark' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Dark Mode
+              Modo Escuro
             </button>
             <button
               onClick={() => setThemeMode('light')}
@@ -118,7 +120,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                 themeMode === 'light' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Light Mode
+              Modo Claro
             </button>
           </div>
         </div>
@@ -132,13 +134,13 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
             themeMode === 'dark' ? 'text-white' : 'text-slate-900'
           }`}>
             {themeMode === 'dark'
-              ? `Hi ${userName}, what do you want to make?`
-              : 'What will you build?'}
+              ? `Olá ${userName}, o que você deseja criar?`
+              : 'O que vamos construir hoje?'}
           </h1>
           <p className={`text-sm sm:text-base max-w-lg mx-auto ${
             themeMode === 'dark' ? 'text-slate-400' : 'text-slate-600'
           }`}>
-            Turn ideas into apps in minutes — no coding needed
+            Transforme suas ideias em aplicativos completos em minutos — sem precisar programar
           </p>
         </div>
 
@@ -162,7 +164,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                   handlePromptSubmit();
                 }
               }}
-              placeholder="Describe your idea, Intuitiva IA will bring it to life..."
+              placeholder="Descreva sua ideia, a Intuitiva IA dará vida a ela..."
               rows={3}
               className={`w-full bg-transparent outline-none resize-none text-sm sm:text-base leading-relaxed ${
                 themeMode === 'dark' ? 'text-slate-100 placeholder-slate-500' : 'text-slate-900 placeholder-slate-500'
@@ -181,7 +183,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                       ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-200'
                       : 'bg-amber-100 hover:bg-amber-200 border-amber-200 text-slate-800'
                   }`}
-                  title="Add attachments or starting point"
+                  title="Adicionar anexos ou ponto de partida"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
@@ -192,7 +194,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                     themeMode === 'dark' ? 'bg-[#22252e] border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-900'
                   }`}>
                     <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                      Add attachments
+                      Adicionar anexos
                     </div>
                     <button
                       type="button"
@@ -203,13 +205,13 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                       className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center gap-3 transition-colors cursor-pointer"
                     >
                       <Upload className="w-4 h-4 text-indigo-400" />
-                      <span>Upload a file</span>
+                      <span>Enviar um arquivo</span>
                     </button>
 
                     <div className="my-1.5 border-t border-slate-800" />
 
                     <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                      Add a starting point
+                      Adicionar ponto de partida
                     </div>
                     <button
                       type="button"
@@ -220,7 +222,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                       className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-indigo-600/20 hover:text-indigo-300 flex items-center gap-3 transition-colors cursor-pointer"
                     >
                       <span className="w-4 h-4 rounded bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center text-[10px]">🎨</span>
-                      <span>Import a Figma design</span>
+                      <span>Importar design do Figma</span>
                     </button>
 
                     <button
@@ -233,7 +235,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <FolderDown className="w-4 h-4 text-emerald-400" />
-                        <span>Import an existing project</span>
+                        <span>Importar projeto existente</span>
                       </div>
                       <ExternalLink className="w-3 h-3 text-slate-500" />
                     </button>
@@ -245,7 +247,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                     >
                       <div className="flex items-center gap-3">
                         <Sparkles className="w-4 h-4 text-amber-400" />
-                        <span>Use a skill</span>
+                        <span>Usar uma habilidade</span>
                       </div>
                       <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
                     </button>
@@ -253,8 +255,8 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                     {showSkillSubmenu && (
                       <div className="p-2 bg-slate-900/90 rounded-xl mt-1 text-[11px] text-slate-300 space-y-1">
                         <div className="hover:text-white cursor-pointer p-1">⚡ React / Tailwind Full Stack</div>
-                        <div className="hover:text-white cursor-pointer p-1">🗄️ PostgreSQL / Express API</div>
-                        <div className="hover:text-white cursor-pointer p-1">🤖 Gemini AI Multidisciplinary Agent</div>
+                        <div className="hover:text-white cursor-pointer p-1">🗄️ API PostgreSQL / Express</div>
+                        <div className="hover:text-white cursor-pointer p-1">🤖 Agente Multidisciplinar Gemini IA</div>
                       </div>
                     )}
                   </div>
@@ -270,14 +272,14 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
                     onChange={(e) => setIsPlanChecked(e.target.checked)}
                     className="w-3.5 h-3.5 accent-indigo-600 rounded cursor-pointer"
                   />
-                  <span>Plan</span>
+                  <span>Planejar</span>
                 </label>
 
                 <button
                   type="button"
                   onClick={() => alert('Ativando Entrada por Voz... Fale sua ideia!')}
                   className="p-2 text-slate-400 hover:text-slate-200 rounded-lg transition-colors cursor-pointer"
-                  title="Voice input"
+                  title="Entrada por voz"
                 >
                   <Mic className="w-4 h-4" />
                 </button>
@@ -343,7 +345,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
         {/* Example Prompt Presets ("Try an example prompt 🔄") */}
         <div className="space-y-3 text-center w-full">
           <div className="text-xs font-semibold text-slate-400 flex items-center justify-center gap-1.5">
-            <span>Try an example prompt</span>
+            <span>Experimente um exemplo de prompt</span>
             <RotateCw className="w-3.5 h-3.5 text-indigo-400 cursor-pointer hover:rotate-180 transition-transform duration-300" />
           </div>
 
@@ -367,7 +369,7 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
         {/* Ecosystem / Trust Bar (Stripe, Zillow, Plaid, Adobe, Atlassian, Boeing, ClickUp, Coinbase) */}
         <div className="pt-8 border-t border-slate-800/40 w-full text-center">
           <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-4">
-            Trusted by developers & teams globally
+            Utilizado e aprovado por desenvolvedores e equipes do mundo inteiro
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8 opacity-60 grayscale hover:grayscale-0 transition-all">
             {brandLogos.map((brand, idx) => (
@@ -381,3 +383,4 @@ export const ReplitAgentHome: React.FC<ReplitAgentHomeProps> = ({
     </div>
   );
 };
+
