@@ -45,9 +45,24 @@ import {
   PanelLeft,
   FileText,
   RotateCcw,
-  Heart
+  Heart,
+  Palette,
+  Undo2,
+  Redo2,
+  Clock
 } from 'lucide-react';
 import { UserSavedProject } from '../types';
+import { ThemeExplorerModal } from './ThemesStudio';
+
+export interface ProjectVersion {
+  id: string;
+  versionNumber: number;
+  timestamp: string;
+  title: string;
+  description: string;
+  project: GeneratedProject;
+  promptUsed?: string;
+}
 
 interface GeneratedProject {
   title: string;
@@ -77,6 +92,16 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
   const [showThoughtProcess, setShowThoughtProcess] = useState(false);
   const [showDesignChoiceModal, setShowDesignChoiceModal] = useState(false);
   const [selectedDirection, setSelectedDirection] = useState<'aurum' | 'tanstack' | 'custom'>('aurum');
+  const [isThemeExplorerOpen, setIsThemeExplorerOpen] = useState(false);
+
+  const handleApplyThemeFromExplorer = (themePrompt: string) => {
+    setProjectPrompt(themePrompt);
+    setSelectedDirection('aurum');
+    setShowThoughtProcess(true);
+    setTimeout(() => {
+      setShowThoughtProcess(false);
+    }, 2000);
+  };
 
   // Interactive Floating Inspector Toolbar State (Matching Reference Images 3-6)
   const [inspectorMode, setInspectorMode] = useState<'none' | 'layout' | 'typography' | 'edit' | 'comments'>('none');
@@ -241,8 +266,8 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
 </body>
 </html>`;
 
-  // Default Project Data (AURUM Editorial Luxury)
-  const [project, setProject] = useState<GeneratedProject>({
+  // Default Project Initial Data
+  const initialProjectData: GeneratedProject = {
     title: 'AURUM — Luxury Design Studio',
     description: 'Home page minimalista e de alto luxo com curadoria editorial, galeria de projetos selecionados e tipografia serifada.',
     agentsExecution: [
@@ -263,7 +288,111 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
         content: `import React from 'react';\n\nexport default function App() {\n  return (\n    <div className="bg-[#0c0c0e] text-white min-h-screen font-sans">\n      <h1 className="text-4xl font-serif">AURUM Studio</h1>\n    </div>\n  );\n}`
       }
     ]
-  });
+  };
+
+  const [project, setProject] = useState<GeneratedProject>(initialProjectData);
+
+  // Versioning & History Engine State
+  const [historyStack, setHistoryStack] = useState<ProjectVersion[]>([
+    {
+      id: 'ver_init',
+      versionNumber: 1,
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      title: 'AURUM — Luxury Design Studio',
+      description: 'Versão inicial do modelo visual luxury.',
+      project: initialProjectData,
+      promptUsed: 'Modelo Inicial AURUM'
+    }
+  ]);
+  const [historyIndex, setHistoryIndex] = useState<number>(0);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [versionToast, setVersionToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setVersionToast(msg);
+    setTimeout(() => setVersionToast(null), 3500);
+  };
+
+  // Push a new project version into the history stack
+  const pushNewVersion = (newProject: GeneratedProject, customTitle?: string, prompt?: string) => {
+    setHistoryStack((prevStack) => {
+      const activeBranch = prevStack.slice(0, historyIndex + 1);
+      const nextVerNum = activeBranch.length + 1;
+      const newVersion: ProjectVersion = {
+        id: `ver_${Date.now()}`,
+        versionNumber: nextVerNum,
+        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        title: customTitle || newProject.title || `Versão v${nextVerNum}`,
+        description: newProject.description || `Alteração autônoma de projeto.`,
+        project: newProject,
+        promptUsed: prompt
+      };
+      return [...activeBranch, newVersion];
+    });
+    setHistoryIndex((prev) => prev + 1);
+    setProject(newProject);
+  };
+
+  // Undo Handler
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const targetIdx = historyIndex - 1;
+      setHistoryIndex(targetIdx);
+      const restored = historyStack[targetIdx];
+      setProject(restored.project);
+      showToast(`Desfeito para v${restored.versionNumber}: "${restored.title}"`);
+    }
+  };
+
+  // Redo Handler
+  const handleRedo = () => {
+    if (historyIndex < historyStack.length - 1) {
+      const targetIdx = historyIndex + 1;
+      setHistoryIndex(targetIdx);
+      const restored = historyStack[targetIdx];
+      setProject(restored.project);
+      showToast(`Refeito para v${restored.versionNumber}: "${restored.title}"`);
+    }
+  };
+
+  // Restore specific version from History Modal
+  const handleRestoreVersion = (index: number) => {
+    if (index >= 0 && index < historyStack.length) {
+      setHistoryIndex(index);
+      const restored = historyStack[index];
+      setProject(restored.project);
+      setIsHistoryModalOpen(false);
+      showToast(`Versão v${restored.versionNumber} ("${restored.title}") restaurada com sucesso!`);
+    }
+  };
+
+  // Global Keyboard Shortcuts (Ctrl+Z / Cmd+Z and Ctrl+Y / Cmd+Shift+Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          handleRedo();
+        } else {
+          e.preventDefault();
+          handleUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [historyIndex, historyStack]);
 
   const [viewMode, setViewMode] = useState<'preview' | 'code' | 'agents'>('preview');
   const [viewportSize, setViewportSize] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
@@ -292,6 +421,260 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
     });
   };
 
+  // Autonomous Website Generator Engine (API + Smart Local Fallback)
+  const generateCustomWebsiteFromPrompt = async (userPrompt: string): Promise<GeneratedProject> => {
+    // 1. Try server API /api/gerar
+    try {
+      const res = await fetch('/api/gerar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: userPrompt })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.html && data.html.trim().length > 100) {
+          const titleMatch = data.html.match(/<title>(.*?)<\/title>/i);
+          const autoTitle = titleMatch ? titleMatch[1] : userPrompt.split(' ').slice(0, 4).join(' ').toUpperCase();
+          return {
+            title: autoTitle,
+            description: data.message || `Site projetado e construído autonomamente pela Intuitiva IA para: "${userPrompt}"`,
+            agentsExecution: [
+              { role: 'UX/UI Designer', status: 'completed', details: 'Direção visual, contraste, tipografia e layout responsivo com Tailwind CSS.' },
+              { role: 'Desenvolvedor Front-end', status: 'completed', details: 'Compilação de componentes interativos e lógica cliente em HTML5 + JavaScript.' },
+              { role: 'Especialista em SEO & Copywriter', status: 'completed', details: 'Geração de conteúdo persuasivo, headlines de alta conversão e meta tags.' },
+              { role: 'Auditor de Segurança & QA', status: 'completed', details: 'Acessibilidade WCAG AA, tempos de resposta rápidos e layout totalmente limpo.' }
+            ],
+            htmlPreview: data.html,
+            files: [
+              { name: 'index.html', language: 'html', content: data.html },
+              { name: 'src/App.tsx', language: 'typescript', content: `import React from 'react';\n\nexport default function App() {\n  return (\n    <div className="bg-slate-950 text-white min-h-screen font-sans p-6">\n      <h1 className="text-3xl font-extrabold text-indigo-400">${autoTitle}</h1>\n      <p className="mt-2 text-slate-300">Criado autonomamente pela Intuitiva IA.</p>\n    </div>\n  );\n}` }
+            ]
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('API /api/gerar offline ou indisponível. Ativando Motor Local de Geração Autônoma da Intuitiva IA.', e);
+    }
+
+    // 2. Smart Local Autonomous Website Generator
+    const pLower = userPrompt.toLowerCase();
+
+    let themeBg = 'bg-[#0b0c10]';
+    let accentColor = 'indigo';
+    let categoryTag = 'PROJETO WEB INTELIGENTE';
+    let mainTitle = userPrompt.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    let subtitle = 'Projetado autonomamente pela Intuitiva IA com arquitetura de alta conversão, design responsivo e Clean Code.';
+
+    if (pLower.includes('restaurante') || pLower.includes('comida') || pLower.includes('pizza') || pLower.includes('sushi') || pLower.includes('gastronomia') || pLower.includes('barbearia')) {
+      themeBg = 'bg-[#0d0907]';
+      accentColor = 'amber';
+      categoryTag = 'GASTRONOMIA & EXPERIÊNCIA';
+      subtitle = 'A melhor experiência artesanal preparada com ingredientes selecionados e atendimento exclusivo.';
+    } else if (pLower.includes('médico') || pLower.includes('clinica') || pLower.includes('clínica') || pLower.includes('saude') || pLower.includes('odonto') || pLower.includes('dentista')) {
+      themeBg = 'bg-[#06121e]';
+      accentColor = 'emerald';
+      categoryTag = 'SAÚDE & BEM-ESTAR';
+      subtitle = 'Atendimento humanizado, tecnologia médica avançada e cuidado integral com a sua saúde e família.';
+    } else if (pLower.includes('loja') || pLower.includes('moda') || pLower.includes('roupa') || pLower.includes('e-commerce') || pLower.includes('produto')) {
+      themeBg = 'bg-[#0f0914]';
+      accentColor = 'rose';
+      categoryTag = 'E-COMMERCE & FASHION';
+      subtitle = 'Coleções exclusivas com design contemporâneo, entrega expressa para todo o Brasil e pagamento facilitado.';
+    } else if (pLower.includes('imóvel') || pLower.includes('imobiliaria') || pLower.includes('casa') || pLower.includes('apartamento') || pLower.includes('arquitetura')) {
+      themeBg = 'bg-[#0c0d0e]';
+      accentColor = 'amber';
+      categoryTag = 'IMÓVEIS DE ALTO PADRÃO';
+      subtitle = 'Empreendimentos selecionados com arquitetura premiada, localização privilegiada e valorização garantida.';
+    } else if (pLower.includes('app') || pLower.includes('saas') || pLower.includes('software') || pLower.includes('tecnologia') || pLower.includes('ia')) {
+      themeBg = 'bg-[#080b14]';
+      accentColor = 'cyan';
+      categoryTag = 'TECNOLOGIA & PLATAFORMA IA';
+      subtitle = 'Acelere seus resultados com inteligência artificial de última geração e automação ponta a ponta.';
+    }
+
+    const generatedHtml = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${mainTitle} — Intuitiva IA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
+</head>
+<body class="${themeBg} text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Header Nav -->
+  <header class="border-b border-white/10 backdrop-blur-md sticky top-0 z-50 bg-slate-950/80">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-${accentColor}-500 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg">
+          ★
+        </div>
+        <span class="font-extrabold text-lg text-white tracking-tight">${mainTitle}</span>
+      </div>
+
+      <nav class="hidden md:flex items-center gap-8 text-xs font-semibold text-slate-300">
+        <a href="#inicio" class="hover:text-white transition-colors">Início</a>
+        <a href="#sobre" class="hover:text-white transition-colors">Sobre</a>
+        <a href="#diferenciais" class="hover:text-white transition-colors">Diferenciais</a>
+        <a href="#contato" class="hover:text-white transition-colors">Contato</a>
+      </nav>
+
+      <a href="#contato" class="px-5 py-2.5 bg-${accentColor}-500 hover:bg-${accentColor}-400 text-slate-950 font-extrabold text-xs rounded-full transition-all shadow-lg hover:scale-105">
+        Solicitar Orçamento
+      </a>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section id="inicio" class="relative py-20 px-6 max-w-6xl mx-auto text-center space-y-8 my-auto">
+    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-${accentColor}-500/10 text-${accentColor}-400 border border-${accentColor}-500/20 text-xs font-extrabold tracking-wider uppercase">
+      ✦ ${categoryTag}
+    </div>
+
+    <h1 class="text-4xl sm:text-6xl md:text-7xl font-extrabold text-white tracking-tight leading-tight max-w-4xl mx-auto">
+      ${mainTitle}
+    </h1>
+
+    <p class="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl mx-auto font-light">
+      ${subtitle}
+    </p>
+
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+      <a href="#contato" class="w-full sm:w-auto px-8 py-4 bg-${accentColor}-500 hover:bg-${accentColor}-400 text-slate-950 font-black text-sm rounded-2xl transition-all shadow-xl cursor-pointer">
+        Acessar Agora
+      </a>
+      <a href="#diferenciais" class="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-2xl border border-slate-700 transition-all cursor-pointer">
+        Saiba Mais
+      </a>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="pt-12 grid grid-cols-2 md:grid-cols-4 gap-6 border-t border-white/10 text-center">
+      <div class="space-y-1">
+        <div class="text-3xl font-black text-white font-mono">100%</div>
+        <div class="text-xs text-slate-400 font-medium">Autônomo & Otimizado</div>
+      </div>
+      <div class="space-y-1">
+        <div class="text-3xl font-black text-white font-mono">24/7</div>
+        <div class="text-xs text-slate-400 font-medium">Disponibilidade Ativa</div>
+      </div>
+      <div class="space-y-1">
+        <div class="text-3xl font-black text-${accentColor}-400 font-mono">4.9/5</div>
+        <div class="text-xs text-slate-400 font-medium">Avaliação de Clientes</div>
+      </div>
+      <div class="space-y-1">
+        <div class="text-3xl font-black text-white font-mono">10x</div>
+        <div class="text-xs text-slate-400 font-medium">Mais Conversão</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="diferenciais" class="py-20 bg-slate-950/60 border-y border-white/5 px-6">
+    <div class="max-w-6xl mx-auto space-y-12">
+      <div class="text-center space-y-3 max-w-xl mx-auto">
+        <span class="text-xs font-bold text-${accentColor}-400 uppercase tracking-widest">Diferenciais da Plataforma</span>
+        <h2 class="text-3xl font-black text-white">Projetado Para Resultados</h2>
+        <p class="text-xs text-slate-400">Estruturado autonomamente com arquitetura moderna e usabilidade de alto nível.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-[#12141c] border border-slate-800 p-6 rounded-2xl space-y-3">
+          <div class="w-10 h-10 rounded-xl bg-${accentColor}-500/20 text-${accentColor}-400 flex items-center justify-center font-bold text-lg">
+            01
+          </div>
+          <h3 class="font-extrabold text-white text-lg">Design Exclusivo</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Layout desenhado para encantar e transmitir autoridade máxima para o seu público.
+          </p>
+        </div>
+
+        <div class="bg-[#12141c] border border-slate-800 p-6 rounded-2xl space-y-3">
+          <div class="w-10 h-10 rounded-xl bg-${accentColor}-500/20 text-${accentColor}-400 flex items-center justify-center font-bold text-lg">
+            02
+          </div>
+          <h3 class="font-extrabold text-white text-lg">Responsividade Total</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Adaptação perfeita para celulares, tablets, notebooks e monitores ultrawide.
+          </p>
+        </div>
+
+        <div class="bg-[#12141c] border border-slate-800 p-6 rounded-2xl space-y-3">
+          <div class="w-10 h-10 rounded-xl bg-${accentColor}-500/20 text-${accentColor}-400 flex items-center justify-center font-bold text-lg">
+            03
+          </div>
+          <h3 class="font-extrabold text-white text-lg">Atendimento Direto</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Integração nativa de contatos para acelerar fechamento de novos negócios.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact Form -->
+  <section id="contato" class="py-20 px-6 max-w-4xl mx-auto w-full space-y-8">
+    <div class="bg-[#12141c] border border-slate-800 p-8 md:p-12 rounded-3xl space-y-6 shadow-2xl">
+      <div class="text-center space-y-2">
+        <h2 class="text-2xl md:text-3xl font-black text-white">Solicitar Atendimento</h2>
+        <p class="text-xs text-slate-400">Preencha o formulário abaixo e entraremos em contato rapidamente.</p>
+      </div>
+
+      <form onsubmit="event.preventDefault(); alert('Solicitação enviada com sucesso!');" class="space-y-4 max-w-lg mx-auto">
+        <div class="space-y-1">
+          <label class="text-xs font-bold text-slate-300">Nome</label>
+          <input type="text" required placeholder="Seu nome" class="w-full bg-slate-900 border border-slate-800 focus:border-${accentColor}-500 rounded-xl p-3 text-xs text-white outline-none">
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-bold text-slate-300">E-mail</label>
+          <input type="email" required placeholder="seu@email.com" class="w-full bg-slate-900 border border-slate-800 focus:border-${accentColor}-500 rounded-xl p-3 text-xs text-white outline-none">
+        </div>
+
+        <div class="space-y-1">
+          <label class="text-xs font-bold text-slate-300">Mensagem</label>
+          <textarea rows="3" required placeholder="Como podemos te ajudar?" class="w-full bg-slate-900 border border-slate-800 focus:border-${accentColor}-500 rounded-xl p-3 text-xs text-white outline-none"></textarea>
+        </div>
+
+        <button type="submit" class="w-full py-3.5 bg-${accentColor}-500 hover:bg-${accentColor}-400 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer shadow-lg">
+          Enviar Mensagem
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-white/10 bg-slate-950 py-8 px-6 mt-auto text-xs text-slate-400 text-center">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="font-bold text-white text-sm">${mainTitle}</div>
+      <div class="text-[11px] text-slate-500">© 2026 ${mainTitle}. Criado autonomamente pela Intuitiva IA.</div>
+    </div>
+  </footer>
+
+</body>
+</html>`;
+
+    return {
+      title: mainTitle,
+      description: `Site projetado autonomamente pela Intuitiva IA para: "${userPrompt}".`,
+      agentsExecution: [
+        { role: 'UX/UI Designer', status: 'completed', details: `Ajuste da paleta ${accentColor.toUpperCase()} e hierarquia de seções.` },
+        { role: 'Desenvolvedor Front-end', status: 'completed', details: 'Compilação de HTML5 responsivo e scripts com Tailwind CSS.' },
+        { role: 'Especialista SEO & Copywriter', status: 'completed', details: 'Redação das chamadas de ação e otimização de texto para conversão.' }
+      ],
+      htmlPreview: generatedHtml,
+      files: [
+        { name: 'index.html', language: 'html', content: generatedHtml }
+      ]
+    };
+  };
+
   const handleGenerateFullWebsiteWithPrompt = async (promptToUse?: string) => {
     const finalPrompt = promptToUse || projectPrompt;
     if (!finalPrompt.trim() || isGenerating) return;
@@ -299,56 +682,33 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
     setIsGenerating(true);
     setShowThoughtProcess(true);
 
-    setTimeout(() => {
-      setShowDesignChoiceModal(true);
+    try {
+      const generatedProject = await generateCustomWebsiteFromPrompt(finalPrompt);
+      pushNewVersion(generatedProject, generatedProject.title, finalPrompt);
+
+      if (onSaveProject) {
+        onSaveProject({
+          id: `proj_${Date.now()}`,
+          title: generatedProject.title,
+          time: 'Criado agora',
+          isPublished: false,
+          previewUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80',
+          headline: generatedProject.description,
+          prompt: finalPrompt,
+          createdAt: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao gerar o site autônomo:', err);
+    } finally {
       setShowThoughtProcess(false);
       setIsGenerating(false);
-    }, 1200);
+    }
   };
 
   const handleApplySelectedDirection = (direction: 'aurum' | 'tanstack' | 'custom') => {
     setShowDesignChoiceModal(false);
-    setIsGenerating(true);
-
-    setTimeout(() => {
-      let chosenTitle = 'AURUM — Luxury Design Studio';
-      let chosenHtml = aurumHtmlTemplate;
-
-      if (direction === 'tanstack') {
-        chosenTitle = 'TanStack Studio — High Performance Web';
-        chosenHtml = `<!DOCTYPE html><html lang="pt-BR"><head><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-950 text-white p-8"><h1 class="text-3xl font-extrabold text-cyan-400">TANSTACK STUDIO</h1><p class="mt-2 text-slate-300">Engine, libraries and high-performance web architecture.</p></body></html>`;
-      }
-
-      const generated: GeneratedProject = {
-        title: chosenTitle,
-        description: `Home page criada com direção de design ${direction.toUpperCase()} e referências visuais do usuário.`,
-        agentsExecution: [
-          { role: 'UX/UI Designer', status: 'completed', details: 'Ajuste de esquema de cores e espaçamentos baseados na direção selecionada.' },
-          { role: 'Desenvolvedor Front-end', status: 'completed', details: 'Compilação do código com Tailwind CSS responsivo.' }
-        ],
-        htmlPreview: chosenHtml,
-        files: [
-          { name: 'index.html', language: 'html', content: chosenHtml }
-        ]
-      };
-
-      setProject(generated);
-      setIsGenerating(false);
-
-      // Save Project to User Saved Projects!
-      if (onSaveProject) {
-        onSaveProject({
-          id: `proj_${Date.now()}`,
-          title: chosenTitle,
-          time: 'Criado agora',
-          isPublished: false,
-          previewUrl: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80',
-          headline: 'Defining the new standard of curation.',
-          prompt: projectPrompt,
-          createdAt: new Date().toISOString()
-        });
-      }
-    }, 1000);
+    handleGenerateFullWebsiteWithPrompt();
   };
 
   const [isVercelModalOpen, setIsVercelModalOpen] = useState(false);
@@ -424,18 +784,70 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
           </div>
 
           {/* Project Title Dropdown */}
-          <button className="flex items-center gap-1.5 font-bold text-white hover:bg-[#1f1f24] px-2 py-1 rounded-lg transition-colors cursor-pointer text-sm">
-            <span>Home Page Creator</span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          <button
+            onClick={() => setIsHistoryModalOpen(true)}
+            title="Clique para ver o Histórico de Versões do Projeto"
+            className="flex items-center gap-1.5 font-bold text-white hover:bg-[#1f1f24] px-2 py-1 rounded-lg transition-colors cursor-pointer text-sm"
+          >
+            <span className="truncate max-w-[180px] sm:max-w-[240px]">{project.title}</span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           </button>
 
-          {/* Action Icons */}
-          <button title="Histórico de Alterações" className="p-1.5 text-slate-400 hover:text-white hover:bg-[#1f1f24] rounded-lg transition-colors cursor-pointer">
-            <History className="w-4 h-4" />
-          </button>
+          {/* Version Control Group (Undo / Redo / Version History) */}
+          <div className="flex items-center bg-[#1f1f24] border border-[#2b2b32] rounded-full p-0.5 px-1 gap-1">
+            {/* Undo Button */}
+            <button
+              onClick={handleUndo}
+              disabled={historyIndex <= 0}
+              title="Desfazer alteração (Ctrl + Z)"
+              className={`p-1.5 rounded-full transition-all cursor-pointer ${
+                historyIndex > 0
+                  ? 'text-slate-200 hover:text-white hover:bg-[#282830]'
+                  : 'text-slate-600 cursor-not-allowed opacity-40'
+              }`}
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Redo Button */}
+            <button
+              onClick={handleRedo}
+              disabled={historyIndex >= historyStack.length - 1}
+              title="Refazer alteração (Ctrl + Y)"
+              className={`p-1.5 rounded-full transition-all cursor-pointer ${
+                historyIndex < historyStack.length - 1
+                  ? 'text-slate-200 hover:text-white hover:bg-[#282830]'
+                  : 'text-slate-600 cursor-not-allowed opacity-40'
+              }`}
+            >
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
+
+            <div className="w-px h-3 bg-slate-700/60 my-auto" />
+
+            {/* History Drawer Trigger */}
+            <button
+              onClick={() => setIsHistoryModalOpen(true)}
+              title="Abrir Histórico Completo de Versões"
+              className="flex items-center gap-1 px-2 py-1 text-slate-300 hover:text-amber-300 hover:bg-[#282830] rounded-full transition-all cursor-pointer text-xs font-mono font-medium"
+            >
+              <History className="w-3.5 h-3.5 text-amber-400" />
+              <span>v{historyIndex + 1}/{historyStack.length}</span>
+            </button>
+          </div>
 
           <button title="Alternar Painel Lateral" className="p-1.5 text-slate-400 hover:text-white hover:bg-[#1f1f24] rounded-lg transition-colors cursor-pointer">
             <PanelLeft className="w-4 h-4" />
+          </button>
+
+          {/* Theme Explorer Trigger Pill */}
+          <button
+            onClick={() => setIsThemeExplorerOpen(true)}
+            title="Explorador de Temas (+400 Temas de UI)"
+            className="flex items-center gap-1.5 px-3 py-1 bg-[#1f1f24] hover:bg-[#282830] border border-amber-500/30 text-amber-400 hover:text-amber-300 rounded-full text-xs font-bold transition-all cursor-pointer shadow-xs"
+          >
+            <Palette className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Temas (+400)</span>
           </button>
 
           {/* Segmented Mode Toggle Pill */}
@@ -598,6 +1010,56 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
                 className="w-full h-full border-none"
               />
 
+              {/* Animated Loading Overlay when isGenerating is true */}
+              {isGenerating && (
+                <div className="absolute inset-0 bg-[#0c0c0e]/95 backdrop-blur-md z-40 flex flex-col items-center justify-center p-6 space-y-6 animate-in fade-in duration-300 text-center">
+                  {/* Glowing Animated Spinner Ring */}
+                  <div className="relative flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-full border-4 border-slate-800 border-t-amber-500 border-r-indigo-500 animate-spin" />
+                    <div className="absolute w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-500 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/40 animate-pulse">
+                      <Sparkles className="w-6 h-6 animate-bounce text-amber-300" />
+                    </div>
+                  </div>
+
+                  {/* Title & Status */}
+                  <div className="space-y-2 max-w-md">
+                    <h3 className="text-xl font-black text-white tracking-tight flex items-center justify-center gap-2">
+                      <span>Projetando Seu Site Autonomamente</span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                    </h3>
+                    <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                      A Intuitiva IA está orquestrando os agentes autônomos para projetar e compilar seu site do zero.
+                    </p>
+                  </div>
+
+                  {/* Animated Agent Loading Steps */}
+                  <div className="bg-[#141418] border border-slate-800/80 rounded-2xl p-4 w-full max-w-md space-y-3 text-left text-xs shadow-2xl">
+                    <div className="flex items-center gap-3 text-slate-200">
+                      <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                      <span className="font-semibold">Analisando prompt, objetivo e tom de voz da marca...</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-300">
+                      <div className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
+                      <span className="font-semibold">Montando paleta de cores, tipografia e grade responsiva...</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-400">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                      <span className="font-semibold">Compilando HTML5, Tailwind CSS e seções de conversão...</span>
+                    </div>
+                  </div>
+
+                  {/* Shimmer Progress Bar */}
+                  <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-full h-3 p-0.5 overflow-hidden relative shadow-inner">
+                    <div className="bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-600 h-full rounded-full animate-pulse transition-all duration-500 w-full" />
+                  </div>
+
+                  <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                    <span>Carregando e renderizando o site em tempo real...</span>
+                  </div>
+                </div>
+              )}
+
               {/* Floating Inspector Bottom Bar Overlay (Exact Match of Reference Images 3-6) */}
               <div className="absolute bottom-6 inset-x-0 z-30 flex items-center justify-center pointer-events-none">
                 <div className="pointer-events-auto bg-[#18181c]/95 backdrop-blur-xl border border-white/20 p-2 px-4 rounded-full shadow-2xl flex items-center gap-4 text-slate-300 text-xs font-bold">
@@ -669,11 +1131,11 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
                       />
                       <button
                         onClick={() => {
-                          setProject(prev => ({ ...prev, title: customTitleOverride || prev.title }));
-                          alert('Título atualizado no projeto!');
+                          const updated = { ...project, title: customTitleOverride || project.title };
+                          pushNewVersion(updated, customTitleOverride || updated.title, 'Ajuste manual de título');
                           setInspectorMode('none');
                         }}
-                        className="w-full bg-amber-400 text-slate-950 font-bold py-1.5 rounded-lg text-xs"
+                        className="w-full bg-amber-400 text-slate-950 font-bold py-1.5 rounded-lg text-xs cursor-pointer"
                       >
                         Salvar Alterações
                       </button>
@@ -883,6 +1345,159 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
             >
               {isDeployingVercel ? 'Publicando...' : 'Confirmar Publicação'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Theme Explorer Modal (+400 UI Themes) */}
+      <ThemeExplorerModal
+        isOpen={isThemeExplorerOpen}
+        onClose={() => setIsThemeExplorerOpen(false)}
+        onSelectTheme={handleApplyThemeFromExplorer}
+      />
+
+      {/* Toast Notification */}
+      {versionToast && (
+        <div className="fixed top-16 right-6 z-50 bg-[#1e1b2e] border border-amber-500/40 text-amber-300 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-bold animate-in fade-in slide-in-from-top-4 backdrop-blur-md">
+          <History className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{versionToast}</span>
+        </div>
+      )}
+
+      {/* Version History Modal */}
+      {isHistoryModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-[#18181c] border border-slate-800 rounded-3xl max-w-2xl w-full p-6 space-y-6 shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center font-bold">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
+                    <span>Histórico de Versões do Projeto</span>
+                    <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      v{historyIndex + 1} de {historyStack.length}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Restaure ou compare edições geradas pela IA e alterações do usuário.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsHistoryModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Undo/Redo Bar + Keyboard Shortcuts Info */}
+            <div className="bg-[#121215] border border-slate-800/80 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0 text-xs">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleUndo}
+                  disabled={historyIndex <= 0}
+                  className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    historyIndex > 0
+                      ? 'bg-slate-800 hover:bg-slate-700 text-white'
+                      : 'bg-slate-900 text-slate-600 cursor-not-allowed'
+                  }`}
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  <span>Desfazer (Ctrl+Z)</span>
+                </button>
+
+                <button
+                  onClick={handleRedo}
+                  disabled={historyIndex >= historyStack.length - 1}
+                  className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    historyIndex < historyStack.length - 1
+                      ? 'bg-slate-800 hover:bg-slate-700 text-white'
+                      : 'bg-slate-900 text-slate-600 cursor-not-allowed'
+                  }`}
+                >
+                  <Redo2 className="w-3.5 h-3.5" />
+                  <span>Refazer (Ctrl+Y)</span>
+                </button>
+              </div>
+
+              <div className="text-[11px] text-slate-400 flex items-center gap-1.5 font-mono">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span>Atalhos: <kbd className="px-1 py-0.5 bg-slate-800 rounded border border-slate-700">Ctrl+Z</kbd> / <kbd className="px-1 py-0.5 bg-slate-800 rounded border border-slate-700">Ctrl+Y</kbd></span>
+              </div>
+            </div>
+
+            {/* Version List */}
+            <div className="overflow-y-auto space-y-3 pr-1 flex-1">
+              {historyStack.map((ver, idx) => {
+                const isCurrent = idx === historyIndex;
+                return (
+                  <div
+                    key={ver.id}
+                    className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                      isCurrent
+                        ? 'bg-amber-500/10 border-amber-500/40 shadow-lg shadow-amber-500/5'
+                        : 'bg-[#121215] border-slate-800/80 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-1 max-w-md">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-mono font-black px-2 py-0.5 rounded-md ${
+                          isCurrent ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-300'
+                        }`}>
+                          v{ver.versionNumber}
+                        </span>
+                        <span className="text-sm font-extrabold text-white">{ver.title}</span>
+                        <span className="text-[11px] font-mono text-slate-400">({ver.timestamp})</span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">
+                        {ver.description}
+                      </p>
+
+                      {ver.promptUsed && (
+                        <div className="text-[11px] text-amber-400 font-mono pt-0.5">
+                          Prompt: "{ver.promptUsed}"
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="shrink-0 flex items-center gap-2">
+                      {isCurrent ? (
+                        <div className="px-4 py-2 bg-amber-400 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 shadow-md">
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Versão Atual</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleRestoreVersion(idx)}
+                          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-sm border border-slate-700/60"
+                        >
+                          Restaurar Versão
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 shrink-0">
+              <span>Total de {historyStack.length} versões registradas.</span>
+              <button
+                onClick={() => setIsHistoryModalOpen(false)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+
           </div>
         </div>
       )}

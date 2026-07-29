@@ -9,6 +9,7 @@ export interface ThemeItem {
   badge?: string;
   previewBg: string;
   primaryColor: string;
+  swatches: string[];
   tags: string[];
   promptToBuild: string;
 }
@@ -70,6 +71,15 @@ export const GENERATED_THEMES: ThemeItem[] = Array.from({ length: 412 }).map((_,
   const title = `${catObj.prefix} ${subType} #${idNum}`;
   const description = `Tema completo pré-configurado para ${catObj.cat.toLowerCase()} com componentes interativos, responsividade nativa, integração com IA e otimização para altas conversões.`;
 
+  const swatchesByStyle: Record<ThemeItem['style'], string[]> = {
+    'Dark Glass': ['#6366f1', '#a855f7', '#0f172a', '#1e293b'],
+    'Minimal White': ['#14b8a6', '#06b6d4', '#f8fafc', '#0f172a'],
+    'Gradient Cyber': ['#f43f5e', '#ec4899', '#38bdf8', '#090d16'],
+    'Luxury Gold': ['#f59e0b', '#d97706', '#78350f', '#0c0c0e'],
+    'Vibrant Modern': ['#f97316', '#ef4444', '#eab308', '#18181b'],
+    'Corporate Tech': ['#3b82f6', '#2563eb', '#1d4ed8', '#0f172a']
+  };
+
   return {
     id: `theme-${idNum}`,
     title,
@@ -81,6 +91,7 @@ export const GENERATED_THEMES: ThemeItem[] = Array.from({ length: 412 }).map((_,
     badge: isPopular ? '🔥 Mais Baixado' : isNew ? '✨ Lançamento' : undefined,
     previewBg: catObj.bg,
     primaryColor: catObj.color,
+    swatches: swatchesByStyle[catObj.style],
     tags: [catObj.cat.split(' ')[0], subType.split(' ')[0], 'IA-Ready', 'Dark Mode', 'Responsivo'],
     promptToBuild: `Crie um site profissional com a identidade visual do tema ${title}, voltado para ${catObj.cat}. Inclua seção hero com CTA, grade de serviços/produtos, depoimentos, tabela de preços e formulário de contato inteligente.`
   };

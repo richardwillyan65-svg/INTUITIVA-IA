@@ -16,7 +16,10 @@ import {
   ExternalLink,
   LayoutGrid,
   Layers,
-  Palette
+  Palette,
+  ArrowUpDown,
+  CheckCircle2,
+  Grid
 } from 'lucide-react';
 import { GENERATED_THEMES, THEME_CATEGORIES, ThemeItem } from '../data/themesCatalog';
 
@@ -28,13 +31,15 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedStyleFilter, setSelectedStyleFilter] = useState<string>('Todos');
+  const [sortBy, setSortBy] = useState<'popular' | 'rating' | 'downloads' | 'name'>('popular');
   const [activePreviewTheme, setActivePreviewTheme] = useState<ThemeItem | null>(null);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [copiedPromptId, setCopiedPromptId] = useState<string | null>(null);
+  const [appliedThemeId, setAppliedThemeId] = useState<string | null>(null);
 
-  // Filter themes
+  // Filter & Sort themes
   const filteredThemes = useMemo(() => {
-    return GENERATED_THEMES.filter((theme) => {
+    let list = GENERATED_THEMES.filter((theme) => {
       const matchesCategory = selectedCategory === 'Todos' || theme.category === selectedCategory;
       const matchesStyle = selectedStyleFilter === 'Todos' || theme.style === selectedStyleFilter;
       const matchesSearch =
@@ -45,10 +50,22 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
 
       return matchesCategory && matchesStyle && matchesSearch;
     });
-  }, [selectedCategory, selectedStyleFilter, searchQuery]);
+
+    if (sortBy === 'rating') {
+      list = [...list].sort((a, b) => b.rating - a.rating);
+    } else if (sortBy === 'downloads') {
+      list = [...list].sort((a, b) => b.downloads - a.downloads);
+    } else if (sortBy === 'name') {
+      list = [...list].sort((a, b) => a.title.localeCompare(b.title));
+    }
+
+    return list;
+  }, [selectedCategory, selectedStyleFilter, searchQuery, sortBy]);
 
   const handleUseTheme = (theme: ThemeItem) => {
+    setAppliedThemeId(theme.id);
     onSelectTheme(theme.promptToBuild);
+    setTimeout(() => setAppliedThemeId(null), 3000);
   };
 
   const handleCopyPrompt = (theme: ThemeItem) => {
@@ -58,20 +75,20 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-950 text-slate-100 p-4 md:p-6 space-y-6">
+    <div className="flex-1 overflow-y-auto bg-[#0c0c0e] text-slate-100 p-4 md:p-6 space-y-6 font-sans">
       {/* Top Header Banner */}
       <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-purple-950 border border-indigo-500/30 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-extrabold uppercase tracking-wider">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-extrabold uppercase tracking-wider">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Catálogo Oficial • +400 Temas de IA</span>
+              <span>Explorador de Temas IA • +400 Modelos Visuals</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">
-              Galeria de Temas & Prévias em Tempo Real
+              Galeria Completa de Temas & Prévias ao Vivo
             </h1>
             <p className="text-xs md:text-sm text-slate-300 leading-relaxed">
-              Explore nossa biblioteca com mais de 400 temas pré-projetados para SaaS, E-commerce, Clínicas, Imobiliárias e Apps. Visualize a prévia ao vivo em qualquer dispositivo e aplique no Criador IA com 1-clique.
+              Escolha entre mais de 400 temas pré-projetados com paletas de cores responsivas, layouts editoriais e componentes prontos. Aplique instantaneamente no seu projeto ativo no Criador de Sites.
             </p>
           </div>
 
@@ -81,7 +98,7 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
               {filteredThemes.length} / 412
             </div>
             <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-              Temas Disponíveis
+              Temas Encontrados
             </div>
           </div>
         </div>
@@ -96,8 +113,8 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Pesquisar entre +400 temas (ex: Dashboard, Clínica, Cripto, Dark Glass)..."
-              className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-2xl px-4 py-3 text-xs text-slate-100 outline-none pl-11 shadow-inner transition-all"
+              placeholder="Pesquisar em +400 temas (ex: Dashboard, Clínica, Dark Glass, Cripto, E-commerce)..."
+              className="w-full bg-[#141418] border border-slate-800 focus:border-indigo-500 rounded-2xl px-4 py-3 text-xs text-slate-100 outline-none pl-11 shadow-inner transition-all"
             />
             <Search className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
             {searchQuery && (
@@ -110,21 +127,36 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
             )}
           </div>
 
-          {/* Style Selector */}
+          {/* Style Filter */}
           <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
             <Filter className="w-4 h-4 text-indigo-400" />
             <select
               value={selectedStyleFilter}
               onChange={(e) => setSelectedStyleFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-800 rounded-2xl px-3.5 py-3 text-xs text-slate-200 outline-none font-semibold cursor-pointer"
+              className="bg-[#141418] border border-slate-800 rounded-2xl px-3.5 py-3 text-xs text-slate-200 outline-none font-semibold cursor-pointer"
             >
               <option value="Todos">Todos os Estilos Visuais</option>
               <option value="Dark Glass">Dark Glassmorphism</option>
               <option value="Minimal White">Minimalista Clean</option>
               <option value="Gradient Cyber">Cyberpunk / Neon</option>
-              <option value="Luxury Gold">Luxury Premium</option>
+              <option value="Luxury Gold">Luxury Gold Premium</option>
               <option value="Vibrant Modern">Cores Vibrantes</option>
               <option value="Corporate Tech">Tech Corporativo</option>
+            </select>
+          </div>
+
+          {/* Sort By Dropdown */}
+          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+            <ArrowUpDown className="w-4 h-4 text-indigo-400" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-[#141418] border border-slate-800 rounded-2xl px-3.5 py-3 text-xs text-slate-200 outline-none font-semibold cursor-pointer"
+            >
+              <option value="popular">Mais Populares</option>
+              <option value="rating">Melhor Avaliados ⭐</option>
+              <option value="downloads">Mais Aplicados 🚀</option>
+              <option value="name">Ordem Alfabética (A-Z)</option>
             </select>
           </div>
         </div>
@@ -140,7 +172,7 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
                   isSelected
                     ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/20'
-                    : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border-slate-800 hover:border-slate-700'
+                    : 'bg-[#141418] text-slate-400 hover:text-slate-200 border-slate-800 hover:border-slate-700'
                 }`}
               >
                 {cat}
@@ -150,12 +182,12 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
         </div>
       </div>
 
-      {/* Themes Grid */}
+      {/* Themes Gallery Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {filteredThemes.slice(0, 48).map((theme) => (
+        {filteredThemes.slice(0, 60).map((theme) => (
           <div
             key={theme.id}
-            className="bg-slate-900 border border-slate-800 hover:border-indigo-500/60 rounded-2xl p-4 flex flex-col justify-between space-y-4 group transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10 hover:-translate-y-1 relative overflow-hidden"
+            className="bg-[#121215] border border-slate-800 hover:border-indigo-500/60 rounded-2xl p-4 flex flex-col justify-between space-y-4 group transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/10 hover:-translate-y-1 relative overflow-hidden"
           >
             {/* Theme Badge */}
             {theme.badge && (
@@ -193,10 +225,10 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
               </div>
 
               {/* Hover Overlay Button */}
-              <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
+              <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 p-2">
                 <button
                   onClick={() => setActivePreviewTheme(theme)}
-                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-lg transition-transform cursor-pointer"
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-lg transition-transform cursor-pointer"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>Prévia Ao Vivo</span>
@@ -207,7 +239,7 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
             {/* Card Information */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-indigo-400 font-bold uppercase truncate max-w-[150px]">
+                <span className="text-indigo-400 font-bold uppercase truncate max-w-[140px]">
                   {theme.category}
                 </span>
                 <div className="flex items-center gap-1 text-amber-300 font-bold">
@@ -220,6 +252,21 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
               <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
                 {theme.description}
               </p>
+
+              {/* Color Swatches Palette */}
+              <div className="flex items-center gap-1.5 pt-1">
+                <span className="text-[10px] text-slate-500 font-mono">Paleta:</span>
+                <div className="flex items-center gap-1">
+                  {theme.swatches.map((color, idx) => (
+                    <span
+                      key={idx}
+                      style={{ backgroundColor: color }}
+                      className="w-3 h-3 rounded-full border border-white/20 inline-block"
+                      title={color}
+                    />
+                  ))}
+                </div>
+              </div>
 
               {/* Tag Pills */}
               <div className="flex flex-wrap gap-1 pt-1">
@@ -248,8 +295,17 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
                 onClick={() => handleUseTheme(theme)}
                 className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-md shadow-indigo-600/20"
               >
-                <Zap className="w-3.5 h-3.5" />
-                <span>Usar na IA</span>
+                {appliedThemeId === theme.id ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Aplicado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Aplicar Tema</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -259,14 +315,14 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
       {/* Pagination Note */}
       <div className="text-center py-6 border-t border-slate-800/80 space-y-2">
         <p className="text-xs text-slate-400">
-          Exibindo temas recomendados para a sua seleção. Total no acervo: <strong className="text-white font-mono">412 temas</strong>.
+          Exibindo temas recomendados para a sua seleção. Total no acervo: <strong className="text-white font-mono">412 temas de alta conversão</strong>.
         </p>
       </div>
 
       {/* Live Preview Modal */}
       {activePreviewTheme && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-3 md:p-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-5xl w-full h-[90vh] flex flex-col shadow-2xl relative overflow-hidden">
+          <div className="bg-[#141418] border border-slate-800 rounded-3xl max-w-5xl w-full h-[90vh] flex flex-col shadow-2xl relative overflow-hidden">
             {/* Modal Top Bar */}
             <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
@@ -373,7 +429,7 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
                         className="px-6 py-3 bg-white text-slate-950 font-black text-xs rounded-xl shadow-xl hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-2"
                       >
                         <Zap className="w-4 h-4 text-indigo-600" />
-                        <span>Gerar este Site Agora</span>
+                        <span>Aplicar este Tema no Projeto</span>
                       </button>
                     </div>
                   </div>
@@ -417,7 +473,7 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
             {/* Modal Bottom Action Controls */}
             <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 text-xs">
               <div className="text-slate-400">
-                Gostou deste tema? A Intuitiva IA irá gerar o projeto completo baseado neste modelo.
+                Gostou deste tema? A Intuitiva IA irá aplicar toda a identidade visual no seu criador.
               </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -453,6 +509,62 @@ export const ThemesStudio: React.FC<ThemesStudioProps> = ({ onSelectTheme }) => 
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+/* Exportable Theme Explorer Modal for WebBuilderStudio */
+interface ThemeExplorerModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectTheme: (prompt: string) => void;
+}
+
+export const ThemeExplorerModal: React.FC<ThemeExplorerModalProps> = ({
+  isOpen,
+  onClose,
+  onSelectTheme
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-hidden">
+      <div className="bg-[#121215] border border-slate-800 rounded-3xl max-w-6xl w-full h-[88vh] flex flex-col shadow-2xl relative overflow-hidden">
+        {/* Modal Header */}
+        <div className="p-4 px-6 bg-[#18181c] border-b border-slate-800 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-xl">
+              <Palette className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span>Theme Explorer</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono font-semibold">
+                  +400 Temas Prontos
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400">Escolha um modelo visual para aplicar diretamente no seu criador ativo.</p>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-white bg-slate-800 rounded-xl transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body: Render ThemesStudio logic */}
+        <div className="flex-1 overflow-y-auto">
+          <ThemesStudio
+            onSelectTheme={(prompt) => {
+              onSelectTheme(prompt);
+              onClose();
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 };
