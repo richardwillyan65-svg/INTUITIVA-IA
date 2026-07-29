@@ -113,14 +113,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={() => setActiveTab('specialties')}
-            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-3 cursor-pointer ${
+            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-between cursor-pointer ${
               activeTab === 'specialties'
-                ? 'bg-[#222226] text-white font-bold border border-slate-700/60'
+                ? 'bg-[#222226] text-white font-bold border border-slate-700/60 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            <Link2 className="w-4 h-4 text-slate-400" />
-            <span>Connectors</span>
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-4 h-4 text-indigo-400" />
+              <span>Matriz 300+ Recursos</span>
+            </div>
+            <span className="text-[9px] font-bold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/30">
+              300+
+            </span>
           </button>
         </div>
 

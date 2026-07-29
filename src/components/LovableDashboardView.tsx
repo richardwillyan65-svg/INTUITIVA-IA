@@ -1,8 +1,4 @@
 import React, { useState } from 'react';
-import { Search, Plus, Mic, ArrowUp, ExternalLink, Sparkles, Folder, Eye, Check, Globe } from 'lucide-react';
-import { useLanguage } from '../context/LanguageContext';
-
-import React, { useState } from 'react';
 import { Search, Plus, Mic, ArrowUp, ExternalLink, Sparkles, Folder, Eye, Check, Globe, FolderPlus } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { UserSavedProject } from '../types';

@@ -196,7 +196,12 @@ export default function App() {
           {activeTab === 'marketing' && <MarketingStudio />}
           {activeTab === 'architecture' && <ArchitectureStudio />}
           {activeTab === 'platforms' && <PlatformGuides />}
-          {activeTab === 'specialties' && <CapabilitiesOverview />}
+          {activeTab === 'specialties' && (
+            <CapabilitiesOverview
+              onSelectPrompt={handleStartBuildFromHome}
+              onNavigateTab={setActiveTab}
+            />
+          )}
         </main>
       </div>
 

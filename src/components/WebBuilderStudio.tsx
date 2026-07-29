@@ -49,10 +49,12 @@ import {
   Palette,
   Undo2,
   Redo2,
-  Clock
+  Clock,
+  Github
 } from 'lucide-react';
 import { UserSavedProject } from '../types';
 import { ThemeExplorerModal } from './ThemesStudio';
+import { GitHubExportModal } from './GitHubExportModal';
 
 export interface ProjectVersion {
   id: string;
@@ -306,6 +308,7 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
   ]);
   const [historyIndex, setHistoryIndex] = useState<number>(0);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isGitHubExportOpen, setIsGitHubExportOpen] = useState(false);
   const [versionToast, setVersionToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -410,7 +413,7 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    Array.from(files).forEach((file) => {
+    Array.from(files).forEach((file: File) => {
       const reader = new FileReader();
       reader.onload = (event) => {
         if (event.target?.result) {
@@ -922,6 +925,16 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
           <div className="w-7 h-7 rounded-full bg-rose-900/60 border border-rose-500/30 overflow-hidden flex items-center justify-center text-xs text-white font-bold">
             <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80" alt="User" className="w-full h-full object-cover" />
           </div>
+
+          {/* Export to GitHub Button */}
+          <button
+            onClick={() => setIsGitHubExportOpen(true)}
+            className="bg-[#24292e] hover:bg-[#2c3137] border border-slate-700/80 text-white px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+            title="Exportar Repositório Automático para o GitHub"
+          >
+            <Github className="w-3.5 h-3.5 text-slate-300" />
+            <span>GitHub</span>
+          </button>
 
           {/* Share Button */}
           <button
@@ -1501,6 +1514,16 @@ export const WebBuilderStudio: React.FC<WebBuilderStudioProps> = ({
           </div>
         </div>
       )}
+
+      {/* GitHub Export Modal */}
+      <GitHubExportModal
+        isOpen={isGitHubExportOpen}
+        onClose={() => setIsGitHubExportOpen(false)}
+        projectTitle={project.title}
+        projectDescription={project.description}
+        projectFiles={project.files}
+        htmlPreview={project.htmlPreview}
+      />
     </div>
   );
 };
